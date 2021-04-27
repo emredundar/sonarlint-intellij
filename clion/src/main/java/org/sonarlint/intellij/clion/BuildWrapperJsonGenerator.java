@@ -38,8 +38,49 @@ public class BuildWrapperJsonGenerator {
     } else {
       builder.append(",");
     }
-    appendEntry(configuration);
+    if (configuration.remoteToolchain) {
+      appendRemoteEntry(configuration);
+    } else {
+      appendEntry(configuration);
+    }
     return this;
+  }
+
+  private void appendRemoteEntry(AnalyzerConfiguration.Configuration entry) {
+    String quotedFilePath = quote(entry.virtualFile.getCanonicalPath());
+    String stdout = entry.predefinedMacros + "\n";
+    StringBuilder stdErrBuilder = new StringBuilder("#include <...> search starts here:\n");
+    entry.includes.forEach(i -> stdErrBuilder.append(" ").append(i).append("\n"));
+    stdErrBuilder.append("End of search list.\n");
+    String stderr = stdErrBuilder.toString();
+
+    addProbe(entry, quotedFilePath, stdout, stderr);
+    addProbe(entry, quotedFilePath, stdout, stderr);
+    builder.append("{")
+      .append("\"compiler\":\"")
+      .append(entry.compilerKind)
+      .append("\",")
+      .append("\"cwd\":" + quote(entry.compilerWorkingDir) + ",")
+      .append("\"executable\":")
+      .append(quotedFilePath)
+      .append(",");
+    if (entry.isHeaderFile) {
+      builder.append("\"properties\":{\"isHeaderFile\":\"true\"},");
+    }
+    builder.append("\"cmd\":[")
+      .append(quote(entry.compilerExecutable))
+      .append("," + quotedFilePath);
+    builder.append("]}");
+  }
+
+  private void addProbe(AnalyzerConfiguration.Configuration entry, String quotedFilePath, String stdout, String stderr) {
+    builder
+      .append("{")
+      .append("\"compiler\":\"").append(entry.compilerKind).append("\",")
+      .append("\"executable\":").append(quotedFilePath).append(",")
+      .append("\"stdout\":").append(quote(stdout)).append(",")
+      .append("\"stderr\":").append(quote(stderr))
+      .append("},");
   }
 
   private void appendEntry(AnalyzerConfiguration.Configuration entry) {

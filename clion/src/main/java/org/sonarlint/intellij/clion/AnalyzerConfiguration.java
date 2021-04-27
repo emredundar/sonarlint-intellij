@@ -41,11 +41,15 @@ import com.jetbrains.cidr.lang.workspace.OCResolveConfiguration;
 import com.jetbrains.cidr.lang.workspace.compiler.ClangCompilerKind;
 import com.jetbrains.cidr.lang.workspace.compiler.GCCCompilerKind;
 import com.jetbrains.cidr.lang.workspace.compiler.OCCompilerKind;
+import com.jetbrains.cidr.lang.workspace.headerRoots.HeadersSearchPath;
 import org.jetbrains.annotations.NotNull;
+import org.sonarlint.intellij.common.ui.SonarLintConsole;
 import org.sonarsource.sonarlint.core.client.api.common.Language;
 
 import javax.annotation.Nullable;
+import java.lang.reflect.Method;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class AnalyzerConfiguration {
   private final Project project;
@@ -87,9 +91,6 @@ public class AnalyzerConfiguration {
     if (configuration == null) {
       return ConfigurationResult.skip("configuration not found");
     }
-    if (usingRemoteToolchain(configuration)) {
-      return ConfigurationResult.skip("use a remote toolchain");
-    }
     OCCompilerSettings compilerSettings = configuration.getCompilerSettings(ocFile.getKind(), file);
     OCCompilerKind compilerKind = compilerSettings.getCompilerKind();
     if (compilerKind == null) {
@@ -99,6 +100,12 @@ public class AnalyzerConfiguration {
     if (cFamilyCompiler == null) {
       return ConfigurationResult.skip("unsupported compiler " + compilerKind.getDisplayName());
     }
+    String preprocessorDefines = null;
+    List<String> includes = null;
+    if (usingRemoteToolchain(configuration)) {
+      preprocessorDefines = getPreprocessorDefines(compilerSettings);
+      includes = compilerSettings.getHeadersSearchPaths().stream().map(HeadersSearchPath::getPath).collect(Collectors.toList());
+    }
     return ConfigurationResult.of(new Configuration(
       file,
       compilerSettings.getCompilerExecutable().getAbsolutePath(),
@@ -106,7 +113,26 @@ public class AnalyzerConfiguration {
       compilerSettings.getCompilerSwitches().getList(CidrCompilerSwitches.Format.RAW),
       "clang",
       getSonarLanguage(languageKind),
+      includes,
+      preprocessorDefines,
       ocFile.isHeader()));
+  }
+
+  @NotNull
+  private String getPreprocessorDefines(OCCompilerSettings compilerSettings) {
+    try {
+      return compilerSettings.getPreprocessorDefines();
+    } catch (NoSuchMethodError e) {
+      SonarLintConsole.get(project).debug("String OCCompilerSettings.getPreprocessorDefines() not found.");
+    }
+    Object result;
+    try {
+      Method method = OCCompilerSettings.class.getMethod("getPreprocessorDefines");
+      result = method.invoke(compilerSettings);
+    } catch (ReflectiveOperationException e) {
+      throw new IllegalStateException(e);
+    }
+    return String.join("\n", (List<String>) result);
   }
 
   @Nullable
@@ -143,7 +169,7 @@ public class AnalyzerConfiguration {
       throw new IllegalStateException(e);
     }
     CPPEnvironment environment = profileInfo.getEnvironment();
-    return environment != null && environment.getToolSet().isRemote();
+    return environment != null && (environment.getToolSet().isRemote() || environment.getToolSet().isWSL());
   }
 
   public static class ConfigurationResult {
@@ -198,6 +224,11 @@ public class AnalyzerConfiguration {
     final boolean isHeaderFile;
     @Nullable
     final Language sonarLanguage;
+    @Nullable
+    final List<String> includes;
+    @Nullable
+    final String predefinedMacros;
+    final boolean remoteToolchain;
 
     public Configuration(
       VirtualFile virtualFile,
@@ -207,12 +238,28 @@ public class AnalyzerConfiguration {
       String compilerKind,
       @Nullable Language sonarLanguage,
       boolean isHeaderFile) {
+      this(virtualFile, compilerExecutable, compilerWorkingDir, compilerSwitches, compilerKind, sonarLanguage, null, null, isHeaderFile);
+    }
+
+    public Configuration(
+      VirtualFile virtualFile,
+      String compilerExecutable,
+      String compilerWorkingDir,
+      List<String> compilerSwitches,
+      String compilerKind,
+      @Nullable Language sonarLanguage,
+      @Nullable List<String> includes,
+      @Nullable String predefinedMacros,
+      boolean isHeaderFile) {
       this.virtualFile = virtualFile;
       this.compilerExecutable = compilerExecutable;
       this.compilerWorkingDir = compilerWorkingDir;
       this.compilerSwitches = compilerSwitches;
       this.compilerKind = compilerKind;
       this.sonarLanguage = sonarLanguage;
+      this.includes = includes;
+      this.predefinedMacros = predefinedMacros;
+      this.remoteToolchain = (includes != null) && (predefinedMacros != null);
       this.isHeaderFile = isHeaderFile;
     }
   }

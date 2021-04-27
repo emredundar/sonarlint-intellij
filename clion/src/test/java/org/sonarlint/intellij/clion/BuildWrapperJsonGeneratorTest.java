@@ -139,6 +139,41 @@ class BuildWrapperJsonGeneratorTest {
       json);
   }
 
+  @Test
+  void remote() {
+    MockLocalFileSystem fileSystem = new MockLocalFileSystem();
+
+    VirtualFile virtualFile = fileSystem.findFileByIoFile(new File("test.cpp"));
+    File compilerExecutable = new File("/path/to/compiler").getAbsoluteFile();
+    File compilerWorkingDir = new File("/path/to/compiler/working/dir").getAbsoluteFile();
+
+    AnalyzerConfiguration.Configuration configuration = new AnalyzerConfiguration.Configuration(
+      virtualFile,
+      compilerExecutable.toString(),
+      compilerWorkingDir.toString(),
+      Arrays.asList("a1", "a2"),
+      "clang",
+      null,
+      Arrays.asList("/path/to/inc1", "/path/to/inc2", "/path/to/inc3"),
+      "#define A 1\n#define B 2",
+      false);
+    String json = new BuildWrapperJsonGenerator()
+      .add(configuration)
+      .build();
+    assertEquals(
+      "{\"version\":0,\"captures\":[" +
+        "{\"compiler\":\"clang\",\"executable\":\"/test.cpp\",\"stdout\":\"#define A 1\\n#define B 2\\n\",\"stderr\":\"#include <...> search starts here:\\n /path/to/inc1\\n /path/to/inc2\\n /path/to/inc3\\nEnd of search list.\\n\"}," +
+        "{\"compiler\":\"clang\",\"executable\":\"/test.cpp\",\"stdout\":\"#define A 1\\n#define B 2\\n\",\"stderr\":\"#include <...> search starts here:\\n /path/to/inc1\\n /path/to/inc2\\n /path/to/inc3\\nEnd of search list.\\n\"}," +
+        "{\"compiler\":\"clang\",\"cwd\":"
+        + quote(compilerWorkingDir)
+        + ",\"executable\":"
+        + "\"/test.cpp\""
+        + ",\"cmd\":["
+        + quote(compilerExecutable) + ",\"/test.cpp\"]}" +
+        "]}",
+      json);
+  }
+
   private static String quote(File file) {
     return BuildWrapperJsonGenerator.quote(file.getAbsoluteFile().toString());
   }
