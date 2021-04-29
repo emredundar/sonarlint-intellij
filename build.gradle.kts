@@ -157,6 +157,8 @@ configurations {
 }
 
 dependencies {
+    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.4.30")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:1.4.30")
     implementation("org.sonarsource.sonarlint.core:sonarlint-core:$sonarlintCoreVersion")
     implementation("commons-lang:commons-lang:2.6")
     compileOnly("com.google.code.findbugs:jsr305:2.0.2")
@@ -165,6 +167,8 @@ dependencies {
     }
     implementation(project(":clion"))
     implementation(project(":common"))
+    testImplementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7")
+    testImplementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     testImplementation("junit:junit:4.12")
     testImplementation("org.assertj:assertj-core:3.16.1")
     testImplementation("org.mockito:mockito-core:2.19.0")
